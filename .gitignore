@@ -1,0 +1,40 @@
+# Byte-compiled / arquivos temporários do Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Ambiente virtual
+venv/
+.env/
+.venv/
+
+# Configurações do VS Code
+.vscode/
+
+# Arquivos de log
+*.log
+
+# Arquivos de banco de dados
+*.sqlite3
+*.db
+
+# Arquivos de cache
+*.cache/
+.cache/
+
+# Arquivos de sistema
+.DS_Store
+Thumbs.db
+
+# Arquivos de pacotes
+*.egg-info/
+dist/
+build/
+
+# Arquivos de testes
+.coverage
+htmlcov/
+.tox/
+
+# Outros
+*.bak
