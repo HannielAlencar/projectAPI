@@ -4,24 +4,38 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from typing import List, Dict, Optional
 
+# ADICIONE ESTAS DUAS LINHAS AQUI
+import scraper_caixa
+import processador_pdf
+
 # --- MÓDULOS DA AUTOMAÇÃO (ainda como placeholders) ---
 # No futuro, você substituirá o conteúdo dessas funções pelo código real
 # do Selenium e do Pdfplumber que discutimos.
 
 def baixar_e_processar_editais(ano: int, mes: str, estado: str) -> List[Dict]:
     """
-    FUNÇÃO PLACEHOLDER: Simula o robô que baixa e lê os PDFs.
-    Retorna uma lista de dicionários com os imóveis encontrados e filtrados.
+    Executa o fluxo real de automação: baixa os editais e depois processa os PDFs.
     """
-    print(f"--- SIMULANDO AUTOMAÇÃO PARA {mes}/{ano} de {estado} ---")
-    # Estes são os dados que o seu robô (Módulos 2 e 3) extrairia
-    dados_ficticios = [
-        {"endereco": f"RUA EXEMPLO, 123, {estado}", "valor_1_leilao": 250000.0, "valor_2_leilao": 245000.0, "provisao": 5000.0, "origem_edital": f"edital_{mes}_{ano}_1.pdf"},
-        {"endereco": f"AVENIDA TESTE, 456, {estado}", "valor_1_leilao": 500000.0, "valor_2_leilao": 490000.0, "provisao": 10000.0, "origem_edital": f"edital_{mes}_{ano}_2.pdf"},
-        {"endereco": f"TRAVESSA MODELO, 789, {estado}", "valor_1_leilao": 150000.0, "valor_2_leilao": 144500.0, "provisao": 5500.0, "origem_edital": f"edital_{mes}_{ano}_3.pdf"}
-    ]
-    print("--- SIMULAÇÃO CONCLUÍDA ---")
-    return dados_ficticios
+    # Define o nome da pasta onde os arquivos serão salvos e lidos.
+    pasta_dos_editais = "editais_baixados"
+
+    # 1. Chama o robô do scraper_caixa para baixar os arquivos
+    print(f"Iniciando download dos editais para {mes}/{ano} de {estado}...")
+    scraper_caixa.baixar_editais(
+        ano=ano,
+        mes_texto=mes,
+        estado_sigla=estado,
+        pasta_download=pasta_dos_editais
+    )
+    print("Download dos editais concluído.")
+
+    # 2. Chama o processador_pdf para ler os arquivos baixados e filtrar os imóveis
+    print("Iniciando processamento dos PDFs baixados...")
+    imoveis_reais_filtrados = processador_pdf.processar_pdfs_e_filtrar(pasta_dos_editais)
+    print(f"Processamento concluído. {len(imoveis_reais_filtrados)} imóveis aprovados encontrados.")
+
+    # 3. Retorna os dados reais que foram extraídos
+    return imoveis_reais_filtrados
 
 # --- ESTRUTURA DA API ---
 
