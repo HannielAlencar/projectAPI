@@ -1,0 +1,6 @@
+uvicorn
+fastapi
+python-multipart
+python-slugify[unidecode]
+pdfplumber
+webdriver-manager
