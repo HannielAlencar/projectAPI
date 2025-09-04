@@ -1,4 +1,4 @@
-# processador_pdf.py (VERSÃO FINAL)
+# processador_pdf.py (VERSÃO CORRIGIDA E MELHORADA)
 
 import os
 import re
@@ -11,8 +11,48 @@ def limpar_valor_monetario(valor_str: str) -> float:
     valor_limpo = re.sub(r'[R$\s.]', '', valor_str).replace(',', '.')
     try:
         return float(valor_limpo)
-    except ValueError:
+    except (ValueError, TypeError):
         return 0.0
+
+def extrair_imoveis_do_texto(texto_completo: str, nome_arquivo: str) -> list:
+    imoveis_extraidos = []
+    estado_atual, cidade_atual = "", ""
+
+    # Padrão para encontrar um bloco de imóvel:
+    # Começa com um número no início da linha, seguido por texto e pelos valores de leilão.
+    # Esta regex captura o número do item, todo o texto descritivo, e os três valores no final.
+    padrao_bloco = re.compile(
+        r"^\s*(\d+)\s+(.*?)"  # 1: Número do item, 2: Todo o texto de descrição
+        r"([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s*$",  # 3, 4, 5: Valor 1º Leilão, Valor 2º Leilão, Valor Avaliação
+        re.MULTILINE | re.DOTALL # MULTILINE para ^ funcionar em cada linha, DOTALL para . capturar quebras de linha
+    )
+
+    for trecho in texto_completo.split("Estado:")[1:]:
+        estado_match = re.search(r"(\w{2})", trecho)
+        if estado_match:
+            estado_atual = estado_match.group(1).strip()
+
+        for sub_trecho in trecho.split("Cidade:")[1:]:
+            cidade_match = re.search(r"([^\n]+)", sub_trecho)
+            if cidade_match:
+                cidade_atual = cidade_match.group(1).strip()
+            
+            for match in padrao_bloco.finditer(sub_trecho):
+                id_lote_str, descricao, valor1_str, valor2_str, _ = match.groups()
+                
+                imovel = {
+                    "id_lote": int(id_lote_str),
+                    "estado": estado_atual,
+                    "cidade": cidade_atual,
+                    "descricao_completa": ' '.join(descricao.replace('\n', ' ').split()),
+                    "valor1_str": valor1_str,
+                    "valor2_str": valor2_str,
+                    "origem_edital": nome_arquivo
+                }
+                imoveis_extraidos.append(imovel)
+
+    return imoveis_extraidos
+
 
 def processar_pdfs_e_filtrar(pasta_pdfs: str) -> list[dict]:
     imoveis_aprovados = []
@@ -25,44 +65,35 @@ def processar_pdfs_e_filtrar(pasta_pdfs: str) -> list[dict]:
         if nome_arquivo.lower().endswith(".pdf"):
             caminho_completo = os.path.join(pasta_pdfs, nome_arquivo)
             print(f"  - Lendo arquivo: {nome_arquivo}")
+
             try:
                 with pdfplumber.open(caminho_completo) as pdf:
                     texto_completo = ""
-                    for page in pdf.pages[22:]:
-                        texto_pagina = page.extract_text(layout=True)
+                    # Começa a extrair o texto de onde os imóveis começam a ser listados
+                    for page in pdf.pages[21:]: 
+                        texto_pagina = page.extract_text()
                         if texto_pagina:
                             texto_completo += texto_pagina + "\n"
                 
-                anexo_match = re.search(r"Anexo II - RELAÇÃO DE IMÓVEIS", texto_completo)
-                if not anexo_match: continue
-                
-                texto_imoveis = texto_completo[anexo_match.start():]
-                lotes_texto = re.split(r'\n(\d+)\s(?!CIDADE)', texto_imoveis)
-                
-                estado_atual, cidade_atual = "", ""
-                for i in range(1, len(lotes_texto), 2):
-                    numero_lote, texto_lote = lotes_texto[i], lotes_texto[i+1]
-                    
-                    estado_match = re.search(r"ESTADO: (\w{2})", texto_lote)
-                    cidade_match = re.search(r"CIDADE: (.*?)\n", texto_lote)
-                    if estado_match: estado_atual = estado_match.group(1).strip()
-                    if cidade_match: cidade_atual = cidade_match.group(1).strip()
-                    
-                    endereco_match = re.search(r'\n(.*?)\n(.*?)\n(.*?)\n(.*?)\n', texto_lote)
-                    valores = re.findall(r'([\d.,]+)', texto_lote)
-                    
-                    if len(valores) >= 3:
-                        valor1 = limpar_valor_monetario(valores[-3])
-                        valor2 = limpar_valor_monetario(valores[-2])
-                        
+                imoveis_brutos = extrair_imoveis_do_texto(texto_completo, nome_arquivo)
+
+                for imovel_data in imoveis_brutos:
+                    valor1 = limpar_valor_monetario(imovel_data["valor1_str"])
+                    valor2 = limpar_valor_monetario(imovel_data["valor2_str"])
+
+                    if valor1 > 0 and valor2 > 0:
                         provisao = valor1 - valor2
                         
                         if provisao >= 5000:
-                            endereco = " ".join([p.strip() for p in endereco_match.groups() if p]) if endereco_match else "Endereço não extraído"
                             imovel_aprovado = {
-                                "id_lote": int(numero_lote), "estado": estado_atual, "cidade": cidade_atual,
-                                "endereco": endereco, "valor_1_leilao": valor1, "valor_2_leilao": valor2,
-                                "provisao": round(provisao, 2), "origem_edital": nome_arquivo
+                                "id_lote": imovel_data["id_lote"],
+                                "estado": imovel_data["estado"],
+                                "cidade": imovel_data["cidade"],
+                                "endereco": imovel_data["descricao_completa"], # A descrição agora serve como endereço
+                                "valor_1_leilao": valor1,
+                                "valor_2_leilao": valor2,
+                                "provisao": round(provisao, 2),
+                                "origem_edital": imovel_data["origem_edital"]
                             }
                             imoveis_aprovados.append(imovel_aprovado)
             except Exception as e:
@@ -70,3 +101,19 @@ def processar_pdfs_e_filtrar(pasta_pdfs: str) -> list[dict]:
     
     print(f">>> Processamento finalizado. {len(imoveis_aprovados)} imóveis aprovados.")
     return imoveis_aprovados
+
+
+if __name__ == "__main__":
+    PASTA_DOS_EDITAIS = "editais_baixados"
+
+    if not os.path.exists(PASTA_DOS_EDITAIS):
+        os.makedirs(PASTA_DOS_EDITAIS)
+        print(f"Pasta '{PASTA_DOS_EDITAIS}' criada para teste. Por favor, adicione seu PDF nela.")
+
+    imoveis_encontrados = processar_pdfs_e_filtrar(PASTA_DOS_EDITAIS)
+    
+    if imoveis_encontrados:
+        print("\n--- IMÓVEIS APROVADOS ENCONTRADOS ---")
+        pprint(imoveis_encontrados)
+    else:
+        print("\n--- NENHUM IMÓVEL APROVADO FOI ENCONTRADO ---")

@@ -1,6 +1,6 @@
 # executar_automacao.py
 
-from datetime import date
+from datetime import date, datetime
 import scraper_caixa
 import processador_pdf
 from pprint import pprint
@@ -8,43 +8,52 @@ from pprint import pprint
 # ===================================================================
 # ---               PAINEL DE CONTROLE DA AUTOMAÇÃO               ---
 # ===================================================================
-
 # DEFINA AQUI A DATA A PARTIR DA QUAL VOCÊ QUER OS EDITAIS
-# Formato: (Ano, Mês, Dia)
-DATA_INICIO_BUSCA = date(2025, 9, 16)
+DATA_INICIO_BUSCA = date(2025, 9, 4)
 
 # DEFINA AQUI A LISTA DE ESTADOS QUE O ROBÔ DEVE PESQUISAR
-ESTADOS_PARA_BUSCAR = ["SP", "RJ", "MG", "BA", "SC", "RS", "PE", "CE"] # Adicione ou remova estados
+ESTADOS_PARA_BUSCAR = ["SP"] # Adicione ou remova estados
 
-# NOME DA PASTA PARA SALVAR OS PDFS
+# NOME DA PASTA PARA SALVAR E LER OS PDFS
 PASTA_DOWNLOADS = "editais_baixados"
-
 # ===================================================================
+
+def gerar_meses_anos(data_inicio):
+    meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", 
+             "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+    data_atual = datetime.now()
+    ano_atual, mes_atual = data_atual.year, data_atual.month
+    ano, mes = data_inicio.year, data_inicio.month
+    
+    while ano < ano_atual or (ano == ano_atual and mes <= mes_atual):
+        yield (ano, meses[mes-1])
+        mes += 1
+        if mes > 12:
+            mes = 1
+            ano += 1
 
 if __name__ == "__main__":
     print("="*50)
     print(f"INICIANDO BUSCA AUTOMÁTICA POR EDITAIS")
-    print(f"Data de início da busca: {DATA_INICIO_BUSCA.strftime('%d/%m/%Y')}")
-    print(f"Estados a serem pesquisados: {', '.join(ESTADOS_PARA_BUSCAR)}")
+    print(f"Buscando editais a partir de: {DATA_INICIO_BUSCA.strftime('%d/%m/%Y')}")
     print("="*50)
-    
-    # 1. Chama o scraper inteligente para baixar apenas os arquivos novos
-    scraper_caixa.baixar_editais_a_partir_de(
-        data_inicio=DATA_INICIO_BUSCA,
-        estados=ESTADOS_PARA_BUSCAR,
-        pasta_download=PASTA_DOWNLOADS
-    )
-    
-    # 2. Chama o processador para ler os arquivos que foram baixados
-    imoveis_encontrados = processador_pdf.processar_pdfs_e_filtrar(PASTA_DOWNLOADS)
 
-    if imoveis_encontrados:
-        print("\n--- IMÓVEIS APROVADOS ENCONTRADOS NESTA BUSCA ---")
-        pprint(imoveis_encontrados)
-        # LÓGICA FUTURA: Aqui você pode adicionar o código para salvar
-        # estes dados em um banco de dados ou enviar para o seu sistema.
+    for estado in ESTADOS_PARA_BUSCAR:
+        for ano, mes in gerar_meses_anos(DATA_INICIO_BUSCA):
+            scraper_caixa.baixar_editais_por_mes(
+                ano=ano,
+                mes_texto=mes,
+                estado_sigla=estado,
+                pasta_download=PASTA_DOWNLOADS
+            )
+
+    imoveis_novos_encontrados = processador_pdf.processar_pdfs_e_filtrar(PASTA_DOWNLOADS)
+
+    if imoveis_novos_encontrados:
+        print("\n--- NOVOS IMÓVEIS APROVADOS ENCONTRADOS NESTA BUSCA ---")
+        pprint(imoveis_novos_encontrados)
     else:
-        print("\n--- NENHUM IMÓVEL APROVADO FOI ENCONTRADO NOS NOVOS EDITAIS. ---")
+        print("\n--- NENHUM NOVO IMÓVEL APROVADO FOI ENCONTRADO. ---")
 
     print("\n" + "="*50)
     print("BUSCA AUTOMÁTICA FINALIZADA.")

@@ -63,7 +63,7 @@ db_imoveis: Dict[int, Imovel] = {}
 
 # --- LÓGICA DA AUTOMAÇÃO EM SEGUNDO PLANO ---
 
-def executar_logica_e_salvar(ano: int, mes: str, estado: str):
+def executar_logica_e_salvar(ano: float, mes: str, estado: str):
     """
     Função que executa a automação e salva os resultados no nosso "banco de dados".
     """

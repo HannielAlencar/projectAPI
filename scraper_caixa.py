@@ -1,40 +1,27 @@
-# scraper_caixa.py (VERSÃO ATUALIZADA)
+# scraper_caixa.py (VERSÃO COM PAUSAS PARA VISUALIZAÇÃO)
 
 import os
-import time
-from datetime import datetime
+import time # Importamos o módulo time
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service as ChromeService
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import Select, WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-import re
 
-def gerar_meses_anos(data_inicio):
-    """Gera uma sequência de (ano, mês_texto) a partir da data de início até a data atual."""
-    meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", 
-             "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
-    
-    data_atual = datetime.now()
-    ano_atual, mes_atual = data_atual.year, data_atual.month
-    
-    ano, mes = data_inicio.year, data_inicio.month
-    
-    while ano < ano_atual or (ano == ano_atual and mes <= mes_atual):
-        yield (ano, meses[mes-1])
-        mes += 1
-        if mes > 12:
-            mes = 1
-            ano += 1
-
-def baixar_editais_a_partir_de(data_inicio: datetime.date, estados: list, pasta_download: str):
+def baixar_editais_por_mes(ano: int, mes_texto: str, estado_sigla: str, pasta_download: str):
     """
-    Automatiza a busca e o download de editais a partir de uma data específica.
+    Baixa TODOS os editais encontrados para um mês, ano e estado específicos, com pausas para visualização.
     """
+    print(f"--- Buscando editais para {mes_texto}/{ano} em {estado_sigla} ---")
+    
     os.makedirs(pasta_download, exist_ok=True)
     
     chrome_options = webdriver.ChromeOptions()
+    chrome_options.add_argument("user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36")
+    chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    chrome_options.add_experimental_option('useAutomationExtension', False)
+    
     prefs = {
         "download.default_directory": os.path.abspath(pasta_download),
         "download.prompt_for_download": False,
@@ -46,70 +33,67 @@ def baixar_editais_a_partir_de(data_inicio: datetime.date, estados: list, pasta_
     driver = webdriver.Chrome(service=service, options=chrome_options)
     wait = WebDriverWait(driver, 40)
 
-    print(">>> Iniciando o robô de scraping inteligente...")
-
     try:
         url = "https://venda-imoveis.caixa.gov.br/sistema/busca-documentos.asp"
         driver.get(url)
-        print(f">>> Acessando a URL: {url}")
+        print(f"    -> Acessando a URL...")
+
+        wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+        print("    -> Página carregada. Iniciando preenchimento do formulário...")
         
-        downloads_realizados = 0
+        time.sleep(2) # Pausa inicial
 
-        for estado in estados:
-            print(f"\n--- Buscando no estado: {estado} ---")
-            for ano, mes_texto in gerar_meses_anos(data_inicio):
-                print(f"  - Verificando Mês/Ano: {mes_texto}/{ano}")
-                
-                driver.get(url) # Reinicia a busca para evitar bugs da página
+        print("    -> Selecionando 'Tipo de documento'...")
+        Select(driver.find_element(By.NAME, "cmb_tipo_documento")).select_by_visible_text("Edital de Publicação do Leilão SFI - Edital Único")
+        time.sleep(2) # Pausa para visualização
 
-                wait.until(EC.element_to_be_clickable((By.ID, "cmb_tipo_documento")))
-                Select(driver.find_element(By.ID, "cmb_tipo_documento")).select_by_visible_text("Edital de Publicação do Leilão SFI - Edital Único")
-                Select(driver.find_element(By.ID, "cmb_estado")).select_by_value(estado)
-                Select(driver.find_element(By.ID, "cmb_mes")).select_by_visible_text(mes_texto)
-                Select(driver.find_element(By.ID, "cmb_ano")).select_by_visible_text(str(ano))
-                
-                driver.find_element(By.ID, "btn_next").click()
-                
-                try:
-                    # Aguarda a tabela de resultados aparecer
-                    wait.until(EC.presence_of_element_located((By.CLASS_NAME, "dados-resultado")))
-                    
-                    # Encontra todas as linhas de resultado
-                    linhas_resultado = driver.find_elements(By.XPATH, "//tr[contains(@class, 'dados-resultado')]")
-                    
-                    for linha in linhas_resultado:
-                        texto_linha = linha.text
-                        
-                        # Extrai a data de publicação da linha
-                        match_data = re.search(r"publicado em: (\d{2}/\d{2}/\d{4})", texto_linha)
-                        if match_data:
-                            data_str = match_data.group(1)
-                            data_edital = datetime.strptime(data_str, "%d/%m/%Y").date()
-                            
-                            # A LÓGICA PRINCIPAL: Compara a data do edital com a data de início
-                            if data_edital >= data_inicio:
-                                print(f"    [ENCONTRADO!] Edital de {data_str}. Baixando...")
-                                link_pdf = linha.find_element(By.XPATH, ".//a[contains(@href, '.pdf')]")
-                                link_pdf.click()
-                                downloads_realizados += 1
-                                time.sleep(2) # Pausa para o download iniciar
+        print(f"    -> Selecionando Estado '{estado_sigla}'...")
+        Select(driver.find_element(By.NAME, "cmb_estado")).select_by_value(estado_sigla)
+        time.sleep(2) # Pausa para visualização
 
-                except Exception:
-                    # Se não encontrar resultados, apenas informa e continua para o próximo mês
-                    print(f"    -> Nenhum edital encontrado para {mes_texto}/{ano}.")
-                    continue
+        print(f"    -> Selecionando Mês '{mes_texto}'...")
+        Select(driver.find_element(By.NAME, "cmb_mes_referencia")).select_by_visible_text(mes_texto)
+        time.sleep(2) # Pausa para visualização
+
+        print(f"    -> Selecionando Ano '{ano}'...")
+        Select(driver.find_element(By.NAME, "cmb_ano_referencia")).select_by_visible_text(str(ano))
+        time.sleep(2) # Pausa para visualização
         
-        if downloads_realizados > 0:
-            print(f"\n>>> {downloads_realizados} novo(s) edital(is) baixado(s). Aguardando conclusão...")
+        print("    -> Formulário preenchido.")
+        
+        print("    -> Clicando em 'Próximo'...")
+        driver.find_element(By.ID, "btn_next0").click()
+        
+        try:
+            wait.until(EC.visibility_of_element_located((By.ID, "listadocumentos")))
+            print("    -> Página de resultados carregada.")
+            time.sleep(2) # Pausa para ver os resultados
+
+            xpath_dos_links = "//div[@id='listadocumentos']//a[contains(@href, '.PDF')]"
+            wait.until(EC.presence_of_element_located((By.XPATH, xpath_dos_links)))
+            links_pdf = driver.find_elements(By.XPATH, xpath_dos_links)
+            
+            if not links_pdf:
+                print(f"    -> Nenhum edital encontrado para este período.")
+                return
+
+            print(f"    -> {len(links_pdf)} edital(is) encontrado(s). Iniciando downloads...")
+            for link in links_pdf:
+                print(f"    -> Clicando no link para baixar: {link.text}")
+                link.click()
+                time.sleep(3) # Pausa um pouco maior para garantir que o download inicie
+
+            print("    -> Aguardando conclusão dos downloads...")
             while any(fname.endswith('.crdownload') for fname in os.listdir(pasta_download)):
                 time.sleep(1)
-            print(">>> Downloads concluídos com sucesso!")
-        else:
-            print("\n>>> Nenhum edital novo encontrado a partir da data especificada.")
-
+        except Exception:
+            print(f"    -> Nenhum edital na página de resultados para este período.")
+    
     except Exception as e:
-        print(f"Ocorreu um erro durante a execução do robô: {e}")
+        print(f"    ERRO: Falha crítica no scraping.")
+        print(f"    Detalhe do erro: {e}")
 
     finally:
         print(">>> Fechando o navegador.")
+        time.sleep(2) # Pausa final antes de fechar
         driver.quit()
