@@ -1,4 +1,6 @@
-# Importa as ferramentas necessárias do Selenium
+# scraper_caixa.py (VERSÃO CORRIGIDA PARA DOWNLOAD AUTOMÁTICO)
+
+import os
 import time
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service as ChromeService
@@ -6,71 +8,95 @@ from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import Select, WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.options import Options
 
 # --- Configurações ---
 URL = "https://venda-imoveis.caixa.gov.br/sistema/busca-documentos.asp"
 
-# --- Início do Scraper ---
-print("Iniciando o scraper...")
+def baixar_editais_por_mes(ano: int, mes_texto: str, estado_sigla: str, pasta_download: str):
+    """
+    Navega no site da Caixa, preenche o formulário e baixa os editais de um 
+    determinado mês, ano e estado.
+    """
+    # Garante que a pasta de download existe
+    if not os.path.exists(pasta_download):
+        os.makedirs(pasta_download)
 
-# Configura o driver do Chrome automaticamente
-service = ChromeService(ChromeDriverManager().install())
-driver = webdriver.Chrome(service=service)
-driver.maximize_window() # Maximiza a janela para melhor visualização
+    # Configura as opções do Chrome para fazer download automático
+    chrome_options = Options()
+    chrome_options.add_experimental_option("prefs", {
+        "download.default_directory": os.path.abspath(pasta_download),
+        "download.prompt_for_download": False,
+        "download.directory_upgrade": True,
+        "plugins.always_open_pdf_externally": True
+    })
 
-# Cria um "esperador" que aguardará até 20 segundos para os elementos aparecerem
-wait = WebDriverWait(driver, 20)
-
-try:
-    # 1. Acessar a página alvo
-    print(f"Acessando a URL: {URL}")
-    driver.get(URL)
-
-    # 2. Preencher o formulário de busca (com os dados da sua imagem)
-    # Espera o formulário carregar
-    wait.until(EC.presence_of_element_located((By.NAME, "cmb_tipo_documento")))
-    print("Preenchendo o formulário de busca...")
-
-    # Seleciona "Edital de Publicação do Leilão SFI - Edital Único"
-    Select(driver.find_element(By.NAME, "cmb_tipo_documento")).select_by_visible_text("Edital de Publicação do Leilão SFI - Edital Único")
+    # Configura o driver do Chrome automaticamente com as opções
+    service = ChromeService(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=chrome_options)
+    driver.maximize_window()
+    wait = WebDriverWait(driver, 20)
     
-    # Seleciona o Estado "SP"
-    Select(driver.find_element(By.NAME, "cmb_estado")).select_by_value("SP")
-    
-    # Seleciona o Mês "Setembro"
-    Select(driver.find_element(By.NAME, "cmb_mes_referencia")).select_by_visible_text("Setembro")
-    
-    # Seleciona o Ano "2025"
-    Select(driver.find_element(By.NAME, "cmb_ano_referencia")).select_by_visible_text("2025")
+    arquivos_antes = os.listdir(pasta_download)
 
-    time.sleep(3) # Pausa para você ver o formulário preenchido
+    try:
+        print("Iniciando o scraper...")
+        
+        # 1. Acessar a página alvo
+        print(f"Acessando a URL: {URL}")
+        driver.get(URL)
+        
+        # 2. Preencher o formulário de busca
+        wait.until(EC.presence_of_element_located((By.NAME, "cmb_tipo_documento")))
+        print("Preenchendo o formulário de busca...")
+        
+        Select(driver.find_element(By.NAME, "cmb_tipo_documento")).select_by_visible_text("Edital de Publicação do Leilão SFI - Edital Único")
+        Select(driver.find_element(By.NAME, "cmb_estado")).select_by_value(estado_sigla)
+        Select(driver.find_element(By.NAME, "cmb_mes_referencia")).select_by_visible_text(mes_texto)
+        Select(driver.find_element(By.NAME, "cmb_ano_referencia")).select_by_visible_text(str(ano))
+        
+        # PAUSA ADICIONADA: Permite que você veja o formulário preenchido
+        time.sleep(3)
 
-    # 3. Clicar no botão "Próximo" para realizar a busca
-    print("Clicando em 'Próximo' para buscar os documentos...")
-    driver.find_element(By.ID, "btn_next0").click()
+        # 3. Clicar no botão "Próximo"
+        print("Clicando em 'Próximo' para buscar os documentos...")
+        driver.find_element(By.ID, "btn_next0").click()
+        
+        # PAUSA ADICIONADA: Permite que você veja a página de resultados
+        time.sleep(3)
 
-    # 4. Achar e clicar no botão azul do edital (a parte mais importante)
-    print("Aguardando os resultados da busca...")
-    
-    # Texto que vamos usar para encontrar o botão
-    texto_do_botao_azul = "Edital de Publicação do Leilão SFI"
-    
-    # O robô vai esperar até que o elemento com esse texto esteja PRONTO PARA SER CLICADO
-    botao_edital = wait.until(
-        EC.element_to_be_clickable((By.PARTIAL_LINK_TEXT, texto_do_botao_azul))
-    )
-    
-    print(f"Botão do edital encontrado: '{botao_edital.text}'")
-    print("Clicando no botão azul...")
-    
-    # Ação de clicar no botão
-    botao_edital.click()
-    
-    # Pausa longa para você ver o resultado (o download do PDF deve iniciar)
-    print("Ação finalizada! O navegador ficará aberto por 30 segundos para observação.")
-    time.sleep(30)
-
-finally:
-    # 5. Fechar o navegador no final de tudo
-    print("Fechando o scraper.")
-    driver.quit()
+        # 4. Encontrar e clicar no botão azul do edital para iniciar o download
+        print("Aguardando os resultados da busca...")
+        texto_do_botao_azul = "Edital de Publicação do Leilão SFI"
+        botao_edital = wait.until(
+            EC.element_to_be_clickable((By.PARTIAL_LINK_TEXT, texto_do_botao_azul))
+        )
+        
+        print(f"Botão do edital encontrado: '{botao_edital.text}'")
+        print("Iniciando o download...")
+        botao_edital.click()
+        
+        print("Aguardando o arquivo ser baixado...")
+        tempo_limite = time.time() + 60
+        novo_arquivo = None
+        
+        while time.time() < tempo_limite:
+            arquivos_depois = os.listdir(pasta_download)
+            novos_arquivos = list(set(arquivos_depois) - set(arquivos_antes))
+            
+            novos_arquivos = [f for f in novos_arquivos if not f.endswith('.crdownload')]
+            
+            if novos_arquivos:
+                novo_arquivo = novos_arquivos[0]
+                print(f"Download concluído: '{novo_arquivo}'")
+                break
+            time.sleep(1)
+        
+        if not novo_arquivo:
+            print("Erro: O arquivo não foi baixado dentro do tempo limite.")
+            
+    except Exception as e:
+        print(f"Ocorreu um erro durante a execução: {e}")
+    finally:
+        print("Fechando o navegador.")
+        driver.quit()
