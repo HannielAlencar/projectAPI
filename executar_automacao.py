@@ -1,4 +1,4 @@
-# executar_automacao.py
+# executar_automacao.py (VERSÃO FINAL)
 
 from datetime import date, datetime
 import scraper_caixa
@@ -8,13 +8,8 @@ from pprint import pprint
 # ===================================================================
 # ---               PAINEL DE CONTROLE DA AUTOMAÇÃO               ---
 # ===================================================================
-# DEFINA AQUI A DATA A PARTIR DA QUAL VOCÊ QUER OS EDITAIS
-DATA_INICIO_BUSCA = date(2025, 9, 4)
-
-# DEFINA AQUI A LISTA DE ESTADOS QUE O ROBÔ DEVE PESQUISAR
-ESTADOS_PARA_BUSCAR = ["SP"] # Adicione ou remova estados
-
-# NOME DA PASTA PARA SALVAR E LER OS PDFS
+DATA_INICIO_BUSCA = date.today()
+ESTADOS_PARA_BUSCAR = ["SP"] # Adicione os estados que desejar
 PASTA_DOWNLOADS = "editais_baixados"
 # ===================================================================
 
@@ -35,9 +30,10 @@ def gerar_meses_anos(data_inicio):
 if __name__ == "__main__":
     print("="*50)
     print(f"INICIANDO BUSCA AUTOMÁTICA POR EDITAIS")
-    print(f"Buscando editais a partir de: {DATA_INICIO_BUSCA.strftime('%d/%m/%Y')}")
+    print(f"Data de início da busca: {DATA_INICIO_BUSCA.strftime('%d/%m/%Y')}")
     print("="*50)
 
+    # Etapa 1: O Gerente manda o Coletor buscar os arquivos mês a mês
     for estado in ESTADOS_PARA_BUSCAR:
         for ano, mes in gerar_meses_anos(DATA_INICIO_BUSCA):
             scraper_caixa.baixar_editais_por_mes(
@@ -47,6 +43,7 @@ if __name__ == "__main__":
                 pasta_download=PASTA_DOWNLOADS
             )
 
+    # Etapa 2: O Gerente manda o Analista processar o que foi coletado
     imoveis_novos_encontrados = processador_pdf.processar_pdfs_e_filtrar(PASTA_DOWNLOADS)
 
     if imoveis_novos_encontrados:

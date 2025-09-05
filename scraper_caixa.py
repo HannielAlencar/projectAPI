@@ -90,7 +90,7 @@ def baixar_editais_por_mes(ano: int, mes_texto: str, estado_sigla: str, pasta_do
                 novo_arquivo = novos_arquivos[0]
                 print(f"Download concluído: '{novo_arquivo}'")
                 break
-            time.sleep(1)
+            time.sleep(3)
         
         if not novo_arquivo:
             print("Erro: O arquivo não foi baixado dentro do tempo limite.")
