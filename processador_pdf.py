@@ -17,7 +17,10 @@ def limpar_valor_monetario(valor_str: str) -> float:
 def extrair_imoveis_do_texto(texto_completo: str, nome_arquivo: str) -> list:
     imoveis_extraidos = []
     estado_atual, cidade_atual = "", ""
-
+    
+    # Novo padrão para capturar a Matrícula
+    padrao_matricula = re.compile(r"Matricula:\s*(\w+)\s*")
+    
     # Padrão para encontrar um bloco de imóvel:
     # Começa com um número no início da linha, seguido por texto e pelos valores de leilão.
     # Esta regex captura o número do item, todo o texto descritivo, e os três valores no final.
@@ -40,11 +43,16 @@ def extrair_imoveis_do_texto(texto_completo: str, nome_arquivo: str) -> list:
             for match in padrao_bloco.finditer(sub_trecho):
                 id_lote_str, descricao, valor1_str, valor2_str, _ = match.groups()
                 
+                # Encontra a matrícula no texto da descrição
+                matricula_match = padrao_matricula.search(descricao)
+                matricula = matricula_match.group(1).strip() if matricula_match else None
+                
                 imovel = {
                     "id_lote": int(id_lote_str),
                     "estado": estado_atual,
                     "cidade": cidade_atual,
-                    "descricao_completa": ' '.join(descricao.replace('\n', ' ').split()),
+                    "endereco": ' '.join(descricao.replace('\n', ' ').split()),
+                    "matricula": matricula, # Adicionamos o campo de matrícula
                     "valor1_str": valor1_str,
                     "valor2_str": valor2_str,
                     "origem_edital": nome_arquivo
@@ -54,7 +62,7 @@ def extrair_imoveis_do_texto(texto_completo: str, nome_arquivo: str) -> list:
     return imoveis_extraidos
 
 
-def processar_pdfs_e_filtrar(pasta_pdfs: str) -> list[dict]:
+def processar_pdfs_e_filtrar(pasta_pdfs: str, arquivos_ja_processados: set) -> list[dict]:
     imoveis_aprovados = []
     if not os.path.isdir(pasta_pdfs):
         print(f"Erro: A pasta '{pasta_pdfs}' não foi encontrada.")
@@ -62,6 +70,11 @@ def processar_pdfs_e_filtrar(pasta_pdfs: str) -> list[dict]:
 
     print(f"\n>>> Iniciando processamento de PDFs na pasta '{pasta_pdfs}'...")
     for nome_arquivo in os.listdir(pasta_pdfs):
+        # Ignora arquivos que já foram processados
+        if nome_arquivo in arquivos_ja_processados:
+            print(f"  - Ignorando arquivo já processado: {nome_arquivo}")
+            continue
+
         if nome_arquivo.lower().endswith(".pdf"):
             caminho_completo = os.path.join(pasta_pdfs, nome_arquivo)
             print(f"  - Lendo arquivo: {nome_arquivo}")
@@ -90,6 +103,7 @@ def processar_pdfs_e_filtrar(pasta_pdfs: str) -> list[dict]:
                                 "estado": imovel_data["estado"],
                                 "cidade": imovel_data["cidade"],
                                 "endereco": imovel_data["descricao_completa"], # A descrição agora serve como endereço
+                                "matricula": imovel_data["matricula"], # Adicionamos a matricula ao objeto
                                 "valor_1_leilao": valor1,
                                 "valor_2_leilao": valor2,
                                 "provisao": round(provisao, 2),
@@ -110,7 +124,7 @@ if __name__ == "__main__":
         os.makedirs(PASTA_DOS_EDITAIS)
         print(f"Pasta '{PASTA_DOS_EDITAIS}' criada para teste. Por favor, adicione seu PDF nela.")
 
-    imoveis_encontrados = processar_pdfs_e_filtrar(PASTA_DOS_EDITAIS)
+    imoveis_encontrados = processar_pdfs_e_filtrar(PASTA_DOS_EDITAIS, set())
     
     if imoveis_encontrados:
         print("\n--- IMÓVEIS APROVADOS ENCONTRADOS ---")

@@ -13,7 +13,7 @@ from selenium.webdriver.chrome.options import Options
 # --- Configurações ---
 URL = "https://venda-imoveis.caixa.gov.br/sistema/busca-documentos.asp"
 
-def baixar_editais_por_mes(ano: int, mes_texto: str, estado_sigla: str, pasta_download: str):
+def baixar_editais_por_mes(ano: int, mes_texto: str, estado_sigla: str, pasta_download: str, arquivos_existentes: list):
     """
     Navega no site da Caixa, preenche o formulário e baixa os editais de um 
     determinado mês, ano e estado.
@@ -21,6 +21,12 @@ def baixar_editais_por_mes(ano: int, mes_texto: str, estado_sigla: str, pasta_do
     # Garante que a pasta de download existe
     if not os.path.exists(pasta_download):
         os.makedirs(pasta_download)
+
+    # Verifica se o arquivo já foi baixado ou processado antes de iniciar
+    nome_edital_esperado = f"Edital_de_Leilao_Publico_de_Venda_de_Imoveis_{estado_sigla}_{mes_texto}_{ano}.pdf"
+    if any(nome_edital_esperado in f for f in arquivos_existentes):
+        print(f"Edital para {mes_texto}/{ano} de {estado_sigla} já foi baixado. Ignorando download.")
+        return
 
     # Configura as opções do Chrome para fazer download automático
     chrome_options = Options()

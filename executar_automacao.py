@@ -4,6 +4,7 @@ from datetime import date, datetime
 import scraper_caixa
 import processador_pdf
 from pprint import pprint
+import os # Importamos o módulo 'os'
 
 # ===================================================================
 # ---               PAINEL DE CONTROLE DA AUTOMAÇÃO               ---
@@ -32,6 +33,13 @@ if __name__ == "__main__":
     print(f"INICIANDO BUSCA AUTOMÁTICA POR EDITAIS")
     print(f"Data de início da busca: {DATA_INICIO_BUSCA.strftime('%d/%m/%Y')}")
     print("="*50)
+    
+    # Lista de arquivos para verificar se já foram processados
+    arquivos_ja_processados_path = os.path.join(PASTA_DOWNLOADS, "processados.txt")
+    arquivos_ja_processados = set()
+    if os.path.exists(arquivos_ja_processados_path):
+        with open(arquivos_ja_processados_path, "r") as f:
+            arquivos_ja_processados = set(f.read().splitlines())
 
     # Etapa 1: O Gerente manda o Coletor buscar os arquivos mês a mês
     for estado in ESTADOS_PARA_BUSCAR:
@@ -40,11 +48,20 @@ if __name__ == "__main__":
                 ano=ano,
                 mes_texto=mes,
                 estado_sigla=estado,
-                pasta_download=PASTA_DOWNLOADS
+                pasta_download=PASTA_DOWNLOADS,
+                arquivos_existentes=list(arquivos_ja_processados) # Passa os arquivos já processados para o scraper
             )
 
     # Etapa 2: O Gerente manda o Analista processar o que foi coletado
-    imoveis_novos_encontrados = processador_pdf.processar_pdfs_e_filtrar(PASTA_DOWNLOADS)
+    imoveis_novos_encontrados = processador_pdf.processar_pdfs_e_filtrar(PASTA_DOWNLOADS, arquivos_ja_processados)
+    
+    # Salva os novos arquivos processados
+    if imoveis_novos_encontrados:
+      # Obtém o nome do arquivo de origem de cada imóvel e o armazena no conjunto
+      novos_arquivos_processados = {imovel["origem_edital"] for imovel in imoveis_novos_encontrados}
+      with open(arquivos_ja_processados_path, "a") as f:
+        for arquivo in novos_arquivos_processados:
+          f.write(f"{arquivo}\n")
 
     if imoveis_novos_encontrados:
         print("\n--- NOVOS IMÓVEIS APROVADOS ENCONTRADOS NESTA BUSCA ---")

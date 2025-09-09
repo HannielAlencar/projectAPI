@@ -3,36 +3,49 @@
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from typing import List, Dict, Optional
-
-# ADICIONE ESTAS DUAS LINHAS AQUI
 import scraper_caixa
 import processador_pdf
+import os
 
 # --- MÓDULOS DA AUTOMAÇÃO (ainda como placeholders) ---
 # No futuro, você substituirá o conteúdo dessas funções pelo código real
 # do Selenium e do Pdfplumber que discutimos.
 
-def baixar_e_processar_editais(ano: int, mes: str, estado: str) -> List[Dict]:
+def baixar_e_processar_editais(ano: float, mes: str, estado: str) -> List[Dict]:
     """
     Executa o fluxo real de automação: baixa os editais e depois processa os PDFs.
     """
     # Define o nome da pasta onde os arquivos serão salvos e lidos.
     pasta_dos_editais = "editais_baixados"
+    
+    arquivos_ja_processados_path = os.path.join(pasta_dos_editais, "processados.txt")
+    arquivos_ja_processados = set()
+    if os.path.exists(arquivos_ja_processados_path):
+        with open(arquivos_ja_processados_path, "r") as f:
+            arquivos_ja_processados = set(f.read().splitlines())
 
     # 1. Chama o robô do scraper_caixa para baixar os arquivos
     print(f"Iniciando download dos editais para {mes}/{ano} de {estado}...")
-    scraper_caixa.baixar_editais(
+    scraper_caixa.baixar_editais_por_mes(
         ano=ano,
         mes_texto=mes,
         estado_sigla=estado,
-        pasta_download=pasta_dos_editais
+        pasta_download=pasta_dos_editais,
+        arquivos_existentes=list(arquivos_ja_processados)
     )
     print("Download dos editais concluído.")
 
     # 2. Chama o processador_pdf para ler os arquivos baixados e filtrar os imóveis
     print("Iniciando processamento dos PDFs baixados...")
-    imoveis_reais_filtrados = processador_pdf.processar_pdfs_e_filtrar(pasta_dos_editais)
+    imoveis_reais_filtrados = processador_pdf.processar_pdfs_e_filtrar(pasta_dos_editais, arquivos_ja_processados)
     print(f"Processamento concluído. {len(imoveis_reais_filtrados)} imóveis aprovados encontrados.")
+
+    # Salva os novos arquivos processados
+    if imoveis_reais_filtrados:
+        novos_arquivos_processados = {imovel["origem_edital"] for imovel in imoveis_reais_filtrados}
+        with open(arquivos_ja_processados_path, "a") as f:
+            for arquivo in novos_arquivos_processados:
+                f.write(f"{arquivo}\n")
 
     # 3. Retorna os dados reais que foram extraídos
     return imoveis_reais_filtrados
@@ -48,6 +61,7 @@ app = FastAPI(
 class Imovel(BaseModel):
     id: int
     endereco: str
+    matricula: Optional[str] = None # Adicionamos o campo de matricula
     valor_1_leilao: float
     valor_2_leilao: float
     provisao: float
@@ -63,7 +77,7 @@ db_imoveis: Dict[int, Imovel] = {}
 
 # --- LÓGICA DA AUTOMAÇÃO EM SEGUNDO PLANO ---
 
-def executar_logica_e_salvar(ano: float, mes: str, estado: str):
+def executar_logica_e_salvar(ano: int, mes: str, estado: str):
     """
     Função que executa a automação e salva os resultados no nosso "banco de dados".
     """
@@ -129,4 +143,3 @@ def deletar_imovel(imovel_id: int):
     
     del db_imoveis[imovel_id]
     return {"message": "Imóvel deletado com sucesso"}
-
