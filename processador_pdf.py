@@ -81,14 +81,20 @@ def processar_pdfs_e_filtrar(pasta_pdfs: str, arquivos_ja_processados: set) -> l
 
             try:
                 with pdfplumber.open(caminho_completo) as pdf:
+                    print(f"    PDF aberto com {len(pdf.pages)} páginas")
                     texto_completo = ""
                     # Começa a extrair o texto de onde os imóveis começam a ser listados
-                    for page in pdf.pages[21:]: 
+                    for page_num, page in enumerate(pdf.pages[21:], 21): 
                         texto_pagina = page.extract_text()
                         if texto_pagina:
                             texto_completo += texto_pagina + "\n"
+                    
+                    print(f"    Texto extraído: {len(texto_completo)} caracteres")
+                    if len(texto_completo) > 0:
+                        print(f"    Primeiros 200 chars: {repr(texto_completo[:200])}")
                 
                 imoveis_brutos = extrair_imoveis_do_texto(texto_completo, nome_arquivo)
+                print(f"    Imóveis extraídos: {len(imoveis_brutos)}")
 
                 for imovel_data in imoveis_brutos:
                     valor1 = limpar_valor_monetario(imovel_data["valor1_str"])
@@ -102,7 +108,7 @@ def processar_pdfs_e_filtrar(pasta_pdfs: str, arquivos_ja_processados: set) -> l
                                 "id_lote": imovel_data["id_lote"],
                                 "estado": imovel_data["estado"],
                                 "cidade": imovel_data["cidade"],
-                                "endereco": imovel_data["descricao_completa"], # A descrição agora serve como endereço
+                                "endereco": imovel_data["endereco"], # Corrigido: usar 'endereco' em vez de 'descricao_completa'
                                 "matricula": imovel_data["matricula"], # Adicionamos a matricula ao objeto
                                 "valor_1_leilao": valor1,
                                 "valor_2_leilao": valor2,

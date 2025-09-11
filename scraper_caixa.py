@@ -1,4 +1,4 @@
-# scraper_caixa.py (VERSÃO CORRIGIDA PARA DOWNLOAD AUTOMÁTICO)
+# scraper_caixa.py (VERSÃO CORRIGIDA PARA BAIXAR MÚLTIPLOS EDITAIS)
 
 import os
 import time
@@ -9,23 +9,27 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import Select, WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
+from selenium.common.exceptions import TimeoutException
 
 # --- Configurações ---
 URL = "https://venda-imoveis.caixa.gov.br/sistema/busca-documentos.asp"
 
 def baixar_editais_por_mes(ano: int, mes_texto: str, estado_sigla: str, pasta_download: str, arquivos_existentes: list):
     """
-    Navega no site da Caixa, preenche o formulário e baixa os editais de um 
+    Navega no site da Caixa, preenche o formulário e baixa TODOS os editais de um
     determinado mês, ano e estado.
     """
     # Garante que a pasta de download existe
     if not os.path.exists(pasta_download):
         os.makedirs(pasta_download)
 
-    # Verifica se o arquivo já foi baixado ou processado antes de iniciar
-    nome_edital_esperado = f"Edital_de_Leilao_Publico_de_Venda_de_Imoveis_{estado_sigla}_{mes_texto}_{ano}.pdf"
-    if any(nome_edital_esperado in f for f in arquivos_existentes):
-        print(f"Edital para {mes_texto}/{ano} de {estado_sigla} já foi baixado. Ignorando download.")
+    # Verifica se já existem arquivos baixados para esse período antes de iniciar
+    # Esta verificação foi simplificada para evitar downloads repetidos se o script for executado várias vezes
+    # No entanto, a lógica original que verifica nomes específicos também é válida.
+    # Para o propósito de baixar múltiplos arquivos, esta verificação é mais segura.
+    arquivos_periodo = [f for f in arquivos_existentes if f"{estado_sigla}_{mes_texto}_{ano}" in f or f"EL" in f]
+    if any(f for f in os.listdir(pasta_download) if f"{estado_sigla}_{mes_texto}_{ano}" in f or f"EL" in f):
+        print(f"Arquivos para {mes_texto}/{ano} de {estado_sigla} já parecem ter sido baixados. Ignorando download.")
         return
 
     # Configura as opções do Chrome para fazer download automático
@@ -61,45 +65,58 @@ def baixar_editais_por_mes(ano: int, mes_texto: str, estado_sigla: str, pasta_do
         Select(driver.find_element(By.NAME, "cmb_mes_referencia")).select_by_visible_text(mes_texto)
         Select(driver.find_element(By.NAME, "cmb_ano_referencia")).select_by_visible_text(str(ano))
         
-        # PAUSA ADICIONADA: Permite que você veja o formulário preenchido
         time.sleep(3)
 
         # 3. Clicar no botão "Próximo"
         print("Clicando em 'Próximo' para buscar os documentos...")
         driver.find_element(By.ID, "btn_next0").click()
         
-        # PAUSA ADICIONADA: Permite que você veja a página de resultados
         time.sleep(3)
 
-        # 4. Encontrar e clicar no botão azul do edital para iniciar o download
+        # ------------------- INÍCIO DA SUBSTITUIÇÃO -------------------
+        # 4. Encontrar e clicar em TODOS os botões de edital para iniciar os downloads
         print("Aguardando os resultados da busca...")
         texto_do_botao_azul = "Edital de Publicação do Leilão SFI"
-        botao_edital = wait.until(
-            EC.element_to_be_clickable((By.PARTIAL_LINK_TEXT, texto_do_botao_azul))
-        )
         
-        print(f"Botão do edital encontrado: '{botao_edital.text}'")
-        print("Iniciando o download...")
-        botao_edital.click()
-        
-        print("Aguardando o arquivo ser baixado...")
-        tempo_limite = time.time() + 60
-        novo_arquivo = None
-        
-        while time.time() < tempo_limite:
-            arquivos_depois = os.listdir(pasta_download)
-            novos_arquivos = list(set(arquivos_depois) - set(arquivos_antes))
+        try:
+            # Espera até que pelo menos UM link de edital esteja visível
+            wait.until(EC.visibility_of_element_located((By.PARTIAL_LINK_TEXT, texto_do_botao_azul)))
             
-            novos_arquivos = [f for f in novos_arquivos if not f.endswith('.crdownload')]
+            # Encontra TODOS os elementos (links) que contêm o texto do edital
+            botoes_edital = driver.find_elements(By.PARTIAL_LINK_TEXT, texto_do_botao_azul)
             
-            if novos_arquivos:
-                novo_arquivo = novos_arquivos[0]
-                print(f"Download concluído: '{novo_arquivo}'")
-                break
-            time.sleep(3)
-        
-        if not novo_arquivo:
-            print("Erro: O arquivo não foi baixado dentro do tempo limite.")
+            num_editais = len(botoes_edital)
+            print(f"{num_editais} edital(is) encontrado(s). Iniciando downloads...")
+
+            # Itera (faz um loop) sobre cada botão encontrado para clicar e baixar
+            for i in range(num_editais):
+                # É crucial encontrar os elementos novamente dentro do loop,
+                # pois a página pode ser alterada após um clique.
+                botoes_edital = driver.find_elements(By.PARTIAL_LINK_TEXT, texto_do_botao_azul)
+                botao_atual = botoes_edital[i]
+                
+                print(f"Baixando edital {i + 1}/{num_editais}: '{botao_atual.text}'")
+                botao_atual.click()
+                # Pausa para dar tempo ao início do download antes de prosseguir para o próximo
+                time.sleep(5) 
+
+            print("Aguardando a conclusão de todos os downloads...")
+            tempo_limite = time.time() + 120  # Aumenta o tempo limite para múltiplos arquivos
+            
+            while time.time() < tempo_limite:
+                arquivos_depois = os.listdir(pasta_download)
+                novos_arquivos = [f for f in arquivos_depois if f not in arquivos_antes and not f.endswith('.crdownload')]
+                
+                # Verifica se o número de novos arquivos é igual ao número de editais encontrados
+                if len(novos_arquivos) == num_editais:
+                    print(f"Download de {len(novos_arquivos)} arquivo(s) concluído(s): {', '.join(novos_arquivos)}")
+                    break
+                time.sleep(3)
+
+        except TimeoutException:
+            print(f"Nenhum edital encontrado para {mes_texto}/{ano} de {estado_sigla}.")
+
+        # ------------------- FIM DA SUBSTITUIÇÃO -------------------
             
     except Exception as e:
         print(f"Ocorreu um erro durante a execução: {e}")
